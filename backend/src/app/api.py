@@ -15,6 +15,7 @@ from .schemas import (
     MealPlanRead,
     MealSlotPatch,
     MealSlotRead,
+    OnboardingPut,
     Page,
     PantryItemCreate,
     PantryItemPatch,
@@ -66,6 +67,13 @@ async def get_profile(session: SessionDep, principal: PrincipalDep):
 @router.patch("/me/profile", response_model=ProfileRead)
 async def update_profile(payload: ProfilePatch, session: SessionDep, principal: PrincipalDep):
     return await ProfileService(session, principal.user_id).update(payload)
+
+
+@router.put("/me/onboarding", response_model=ProfileRead)
+async def complete_onboarding(
+    payload: OnboardingPut, session: SessionDep, principal: PrincipalDep
+):
+    return await ProfileService(session, principal.user_id).complete_onboarding(payload)
 
 
 @router.get("/ingredients", response_model=Page[IngredientRead])

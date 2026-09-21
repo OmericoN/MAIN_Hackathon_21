@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, Generic, TypeVar
 from uuid import UUID
 
@@ -45,6 +45,16 @@ class ProfileRepository(Repository[Profile]):
         profile = await self.get()
         for field, value in values.items():
             setattr(profile, field, value)
+        await self.session.flush()
+        await self.session.refresh(profile)
+        return profile
+
+    async def complete_onboarding(self, values: dict[str, Any]) -> Profile:
+        profile = await self.get()
+        for field, value in values.items():
+            setattr(profile, field, value)
+        if profile.onboarding_completed_at is None:
+            profile.onboarding_completed_at = datetime.now(UTC)
         await self.session.flush()
         await self.session.refresh(profile)
         return profile
