@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .errors import ConflictError, ValidationError
 from .repositories import (
     IngredientRepository,
+    IngredientStorageRuleRepository,
     MealPlanRepository,
     PantryRepository,
     ProfileRepository,
@@ -71,25 +72,45 @@ class IngredientService:
     async def list(self, **kwargs):
         return await self.repo.list(**kwargs)
 
+    async def storage_rules(self, ingredient_id: int):
+        await self.repo.require(ingredient_id)
+        return await IngredientStorageRuleRepository(self.repo.session, self.repo.user_id).list_for_ingredient(
+            ingredient_id
+        )
+
 
 class PantryService:
     def __init__(self, session: AsyncSession, user_id: UUID) -> None:
         self.repo = PantryRepository(session, user_id)
         self.ingredients = IngredientRepository(session, user_id)
+        self.storage_rules = IngredientStorageRuleRepository(session, user_id)
+
+    async def _attach_storage_guidance(self, items):
+        item_list = list(items)
+        rules = await self.storage_rules.list_for_ingredients({item.ingredient_id for item in item_list})
+        by_key = {(rule.ingredient_id, rule.storage_state): rule for rule in rules}
+        for item in item_list:
+            item.storage_guidance = by_key.get(
+                (item.ingredient_id, item.storage_state),
+                by_key.get((item.ingredient_id, "as_purchased")),
+            )
+        return item_list
 
     async def list(self, **kwargs):
-        return await self.repo.list(**kwargs)
+        items, total = await self.repo.list(**kwargs)
+        return await self._attach_storage_guidance(items), total
 
     async def expiring(self, days: int, limit: int, offset: int):
-        return await self.repo.list(
+        items, total = await self.repo.list(
             status="available",
             best_before_lte=date.today() + timedelta(days=days),
             limit=limit,
             offset=offset,
         )
+        return await self._attach_storage_guidance(items), total
 
     async def get(self, item_id: int):
-        return await self.repo.get(item_id)
+        return (await self._attach_storage_guidance([await self.repo.get(item_id)]))[0]
 
     async def create(self, payload: PantryItemCreate):
         await self.ingredients.require(payload.ingredient_id)
@@ -101,16 +122,22 @@ class PantryService:
         )
         if values["remaining_quantity"] == 0:
             values["status"] = "depleted"
-        return await self.repo.create(values)
+        return (await self._attach_storage_guidance([await self.repo.create(values)]))[0]
 
     async def update(self, item_id: int, payload: PantryItemPatch):
         current = await self.repo.get(item_id)
         values = payload.model_dump(exclude_unset=True)
+        if (
+            "opened_at" in payload.model_fields_set
+            and payload.opened_at is not None
+            and "storage_state" not in values
+        ):
+            values["storage_state"] = "opened"
         if "remaining_quantity" in values and values["remaining_quantity"] > current.initial_quantity:
             raise ValidationError("remaining_quantity cannot exceed initial_quantity")
         if values.get("remaining_quantity") == 0 and "status" not in values:
             values["status"] = "depleted"
-        return await self.repo.update(item_id, values)
+        return (await self._attach_storage_guidance([await self.repo.update(item_id, values)]))[0]
 
     async def delete(self, item_id: int) -> None:
         await self.repo.delete(item_id)

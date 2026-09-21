@@ -42,6 +42,13 @@ class StorageLocation(StrEnum):
     OTHER = "other"
 
 
+class StorageState(StrEnum):
+    AS_PURCHASED = "as_purchased"
+    OPENED = "opened"
+    RIPE = "ripe"
+    CUT = "cut"
+
+
 class AllergenCode(StrEnum):
     GLUTEN = "gluten"
     CRUSTACEANS = "crustaceans"
@@ -234,6 +241,16 @@ class IngredientRead(APIModel):
     storage_instructions: str | None
 
 
+class IngredientStorageRuleRead(APIModel):
+    ingredient_id: int
+    storage_state: StorageState
+    recommended_storage_location: StorageLocation
+    shelf_life_days: int | None
+    freezer_shelf_life_days: int | None
+    storage_instructions: str
+    avoidance_notes: str | None
+
+
 class PantryItemBase(APIModel):
     ingredient_id: int
     initial_quantity: Decimal = Field(gt=0)
@@ -263,6 +280,7 @@ class PantryItemCreate(PantryItemBase):
 class PantryItemPatch(APIModel):
     remaining_quantity: Decimal | None = Field(default=None, ge=0)
     storage_location: StorageLocation | None = None
+    storage_state: StorageState | None = None
     best_before_on: date | None = None
     opened_at: datetime | None = None
     status: PantryStatus | None = None
@@ -275,6 +293,8 @@ class PantryItemRead(APIModel):
     remaining_quantity: Decimal
     unit: Unit
     storage_location: StorageLocation
+    storage_state: StorageState
+    storage_state_changed_at: datetime
     acquired_at: datetime
     best_before_on: date | None
     opened_at: datetime | None
@@ -284,6 +304,7 @@ class PantryItemRead(APIModel):
     created_at: datetime
     updated_at: datetime
     ingredient: IngredientRead
+    storage_guidance: IngredientStorageRuleRead | None
 
 
 class RecipeIngredientInput(APIModel):

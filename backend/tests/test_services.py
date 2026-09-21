@@ -1,11 +1,12 @@
-from datetime import date
+from datetime import date, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
-from src.app.schemas import MealPlanCreate, MealType, ProfilePatch
-from src.app.services import MealPlanService, ProfileService
+from src.app.schemas import MealPlanCreate, MealType, PantryItemPatch, ProfilePatch
+from src.app.services import MealPlanService, PantryService, ProfileService
 
 
 @pytest.mark.asyncio
@@ -40,3 +41,21 @@ async def test_profile_patch_updates_only_supplied_preferences() -> None:
 
     assert result == "updated"
     service.repo.update.assert_awaited_once_with({"preferred_tastes": ["fresh"]})
+
+
+@pytest.mark.asyncio
+async def test_opening_a_pantry_item_changes_state_without_moving_it() -> None:
+    service = PantryService(AsyncMock(), uuid4())
+    current = SimpleNamespace(initial_quantity=2, ingredient_id=1, storage_state="as_purchased")
+    updated = SimpleNamespace(ingredient_id=1, storage_state="opened")
+    service.repo.get = AsyncMock(return_value=current)
+    service.repo.update = AsyncMock(return_value=updated)
+    service.storage_rules.list_for_ingredients = AsyncMock(return_value=[])
+
+    opened_at = datetime(2026, 9, 21, 12, 0)
+    result = await service.update(7, PantryItemPatch(opened_at=opened_at))
+
+    assert result is updated
+    service.repo.update.assert_awaited_once_with(
+        7, {"opened_at": opened_at, "storage_state": "opened"}
+    )
