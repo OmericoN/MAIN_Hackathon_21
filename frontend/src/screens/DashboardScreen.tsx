@@ -7,6 +7,7 @@ import { emojiBySlug } from '../lib/demoData'
 import type { ImpactSummary, PantryItem } from '../lib/types'
 
 const monday = () => { const date = new Date(); const day = date.getDay() || 7; date.setDate(date.getDate() - day + 1); return date.toISOString().slice(0, 10) }
+const todayTimestamp = Date.now()
 
 export function DashboardScreen() {
   const { api } = useAuth(); const [impact, setImpact] = useState<ImpactSummary | null>(null); const [expiring, setExpiring] = useState<PantryItem[]>([]); const [error, setError] = useState('')
@@ -23,7 +24,7 @@ export function DashboardScreen() {
     </div>
     <Section title="Weekly spend vs. budget" action={<strong><Money value={impact.spent_amount} /> / €{budget}</strong>}><div className="budget-track"><i style={{ width: `${percent}%` }} /></div><div className="positive-line"><CircleCheck /> You’re €{(budget - impact.spent_amount).toFixed(2)} under budget</div></Section>
     <Section title="Today’s meals" action={<CalendarDays />}><div className="coming-soon-inline"><span>🍽️</span><div><strong>Personal recipes are coming soon</strong><small>Your meal slots and preferences are ready for the recipe-generation endpoint.</small></div></div></Section>
-    <Section tone="warning" title="Expiring soon" action={<Link to="/pantry">{expiring.length} items <ArrowRight /></Link>}><p className="section-copy">Use these before they go bad.</p>{expiring.map((item) => <div className="list-row" key={item.id}><span className="emoji-tile">{emojiBySlug[item.ingredient.slug] ?? '🥕'}</span><span><strong>{item.ingredient.name}</strong><small>{item.ingredient.storage_instructions}</small></span><span className="freshness freshness--warning">{Math.max(0, Math.ceil((new Date(item.best_before_on!).getTime() - Date.now()) / 86400000))} days</span></div>)}</Section>
+    <Section tone="warning" title="Expiring soon" action={<Link to="/pantry">{expiring.length} items <ArrowRight /></Link>}><p className="section-copy">Use these before they go bad.</p>{expiring.map((item) => <div className="list-row" key={item.id}><span className="emoji-tile">{emojiBySlug[item.ingredient.slug] ?? '🥕'}</span><span><strong>{item.ingredient.name}</strong><small>{item.ingredient.storage_instructions}</small></span><span className="freshness freshness--warning">{Math.max(0, Math.ceil((new Date(item.best_before_on!).getTime() - todayTimestamp) / 86400000))} days</span></div>)}</Section>
     <Link className="next-week-card" to="/plan/new"><span><PackageOpen /><small>Ready when you are</small><strong>Plan a low-waste week</strong></span><ArrowRight /></Link>
   </div>
 }

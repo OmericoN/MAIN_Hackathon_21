@@ -4,6 +4,7 @@ export const emojiBySlug: Record<string, string> = {
   tomato: '🍅', onion: '🧅', garlic: '🧄', rice: '🍚', pasta: '🍝', spinach: '🥬',
   chickpeas: '🫘', 'chicken-breast': '🍗', egg: '🥚', milk: '🥛', cheese: '🧀',
   banana: '🍌', oats: '🥣', bread: '🍞', avocado: '🥑', 'bell-pepper': '🫑',
+  potato: '🥔', yogurt: '🥣', 'olive-oil': '🫒', apple: '🍎', tuna: '🐟',
 }
 
 export const demoIngredients: Ingredient[] = [
@@ -23,6 +24,11 @@ export const demoIngredients: Ingredient[] = [
   ['bread', 'Bread', 'g', 'counter', 5, 'Keep sealed or freeze portions.'],
   ['avocado', 'Avocado', 'g', 'counter', 5, 'Keep on the counter until ripe, then refrigerate.'],
   ['bell-pepper', 'Bell pepper', 'g', 'refrigerator', 7, 'Keep dry in the crisper drawer.'],
+  ['potato', 'Potatoes', 'g', 'pantry', 30, 'Keep cool, dark, dry and away from onions.'],
+  ['yogurt', 'Yogurt', 'g', 'refrigerator', 10, 'Keep refrigerated and return it to the fridge promptly.'],
+  ['olive-oil', 'Olive oil', 'ml', 'pantry', 365, 'Keep sealed away from heat and direct light.'],
+  ['apple', 'Apples', 'g', 'refrigerator', 28, 'Refrigerate loose in the crisper drawer.'],
+  ['tuna', 'Tuna in water', 'g', 'pantry', 365, 'Keep sealed cans in a cool, dry cupboard.'],
 ].map(([slug, name, unit, location, days, guidance], index) => ({
   id: index + 1,
   slug: String(slug), name: String(name), base_unit: unit as Ingredient['base_unit'],
@@ -92,13 +98,29 @@ export const demoGeneratedPlan: GeneratedPlan = {
 }
 
 export const demoReceipt: Receipt = {
-  id: 88, merchant_name: 'Carrefour', purchased_at: new Date().toISOString(), total_amount: 38.2,
-  currency_code: 'EUR', status: 'review', items: demoGeneratedPlan.shopping_list.items.map((item, index) => ({
-    id: index + 1, line_number: index + 1,
-    raw_text: demoIngredients.find((ingredient) => ingredient.id === item.ingredient_id)?.name ?? 'Grocery item',
-    ingredient_id: item.ingredient_id, quantity: item.required_quantity, unit: item.unit,
-    unit_price: item.estimated_price, line_total: item.estimated_price,
-    match_confidence: Math.max(.86, .98 - index * .02), review_status: 'accepted',
+  id: 88, merchant_name: 'Freshmart', purchased_at: '2025-04-24T16:27:00+02:00', total_amount: 40.62,
+  currency_code: 'EUR', status: 'review', items: [
+    [10, 'Milk 1L (semi-skimmed)', 2000, 'ml', 1.19, 2.38],
+    [9, 'Eggs (10 pack)', 10, 'each', 2.49, 2.49],
+    [14, 'Wholemeal Bread', 1, 'each', 1.89, 1.89],
+    [12, 'Bananas', 1000, 'g', 1.99, 1.99],
+    [8, 'Chicken Breast', 500, 'g', 4.95, 4.95],
+    [4, 'Rice (basmati)', 1000, 'g', 2.39, 2.39],
+    [5, 'Pasta (penne)', 500, 'g', 1.29, 1.29],
+    [1, 'Tomatoes', 1000, 'g', 2.49, 2.49],
+    [2, 'Onions', 1000, 'g', 1.19, 1.19],
+    [17, 'Potatoes', 2000, 'g', 2.98, 2.98],
+    [18, 'Yogurt (4 × 125g)', 500, 'g', .49, 1.96],
+    [13, 'Oats', 500, 'g', 1.49, 1.49],
+    [19, 'Olive Oil (500ml)', 500, 'ml', 5.99, 5.99],
+    [6, 'Spinach', 200, 'g', 1.69, 1.69],
+    [20, 'Apples', 1000, 'g', 2.29, 2.29],
+    [21, 'Tuna in water (2 × 160g)', 320, 'g', 1.29, 2.58],
+  ].map(([ingredientId, rawText, quantity, unit, unitPrice, lineTotal], index) => ({
+    id: index + 1, line_number: index + 1, raw_text: String(rawText),
+    ingredient_id: Number(ingredientId), quantity: Number(quantity), unit: unit as 'g' | 'ml' | 'each',
+    unit_price: Number(unitPrice), line_total: Number(lineTotal),
+    match_confidence: Math.max(.9, .99 - index * .005), review_status: 'accepted' as const,
   })),
 }
 

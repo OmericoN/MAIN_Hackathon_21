@@ -6,14 +6,15 @@ import { demoGeneratedPlan, emojiBySlug } from '../lib/demoData'
 import type { PantryItem, StorageLocation } from '../lib/types'
 
 const labels: Record<StorageLocation, { label: string; emoji: string }> = { refrigerator: { label: 'Fridge', emoji: '🧊' }, pantry: { label: 'Pantry', emoji: '🫙' }, freezer: { label: 'Freezer', emoji: '❄️' }, counter: { label: 'Counter', emoji: '🍌' }, other: { label: 'Other', emoji: '📦' } }
-const daysLeft = (date: string | null) => date ? Math.ceil((new Date(date).getTime() - Date.now()) / 86400000) : null
+const todayTimestamp = Date.now()
+const daysLeft = (date: string | null) => date ? Math.ceil((new Date(date).getTime() - todayTimestamp) / 86400000) : null
 
 export function PantryScreen() {
   const { api } = useAuth(); const [items, setItems] = useState<PantryItem[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [tab, setTab] = useState<'all' | 'soon' | 'later'>('all')
   const [open, setOpen] = useState<Record<string, boolean>>({ refrigerator: true, pantry: false, freezer: false, counter: false }); const [reminders, setReminders] = useState(() => localStorage.getItem('freshloop-reminders') !== 'false')
   useEffect(() => { void api.pantry().then((page) => setItems(page.items)).catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false)) }, [api])
   const soon = useMemo(() => items.filter((item) => { const days = daysLeft(item.best_before_on); return days !== null && days <= 4 }), [items])
-  const later = demoGeneratedPlan.shopping_list.items.filter((item) => item.needed_by_date && new Date(item.needed_by_date).getTime() > Date.now() + 86400000)
+  const later = demoGeneratedPlan.shopping_list.items.filter((item) => item.needed_by_date && new Date(item.needed_by_date).getTime() > todayTimestamp + 86400000)
   if (loading) return <LoadingState label="Checking what stays fresh…" />
   if (error) return <ErrorState message={error} />
   const locations = Object.keys(labels) as StorageLocation[]
