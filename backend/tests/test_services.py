@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -57,5 +57,10 @@ async def test_opening_a_pantry_item_changes_state_without_moving_it() -> None:
 
     assert result is updated
     service.repo.update.assert_awaited_once_with(
-        7, {"opened_at": opened_at, "storage_state": "opened"}
+        7,
+        {
+            "opened_at": opened_at,
+            "storage_state": "opened",
+            "storage_state_changed_at": ANY,
+        },
     )

@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Generic, TypeVar, cast
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -161,6 +162,11 @@ class WasteReason(StrEnum):
     OTHER = "other"
 
 
+class PlanningHorizon(StrEnum):
+    TODAY = "today"
+    WEEK = "week"
+
+
 class ProfileRead(APIModel):
     display_name: str | None
     dietary_preferences: list[str]
@@ -251,12 +257,25 @@ class IngredientStorageRuleRead(APIModel):
     avoidance_notes: str | None
 
 
+class IngredientPackageOptionRead(APIModel):
+    id: int
+    ingredient_id: int
+    label: str
+    quantity: Decimal
+    unit: Unit
+    estimated_price: Decimal | None
+    currency_code: str | None
+    is_default: bool
+    can_freeze: bool
+
+
 class PantryItemBase(APIModel):
     ingredient_id: int
     initial_quantity: Decimal = Field(gt=0)
     remaining_quantity: Decimal | None = Field(default=None, ge=0)
     unit: Unit
     storage_location: StorageLocation = StorageLocation.PANTRY
+    storage_state: StorageState = StorageState.AS_PURCHASED
     acquired_at: datetime | None = None
     best_before_on: date | None = None
     opened_at: datetime | None = None
@@ -304,7 +323,7 @@ class PantryItemRead(APIModel):
     created_at: datetime
     updated_at: datetime
     ingredient: IngredientRead
-    storage_guidance: IngredientStorageRuleRead | None
+    storage_guidance: IngredientStorageRuleRead | None = None
 
 
 class RecipeIngredientInput(APIModel):
@@ -331,6 +350,8 @@ class RecipeCreate(APIModel):
     cook_minutes: int = Field(default=0, ge=0)
     instructions: list[Any] = Field(default_factory=list)
     nutrition: dict[str, Any] = Field(default_factory=dict)
+    preference_tags: list[str] = Field(default_factory=list)
+    generation_metadata: dict[str, Any] = Field(default_factory=dict)
     saved_at: datetime | None = None
     ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
 
@@ -345,6 +366,7 @@ class RecipePatch(APIModel):
     cook_minutes: int | None = Field(default=None, ge=0)
     instructions: list[Any] | None = None
     nutrition: dict[str, Any] | None = None
+    preference_tags: list[str] | None = None
     saved_at: datetime | None = None
     ingredients: list[RecipeIngredientInput] | None = None
 
@@ -361,6 +383,8 @@ class RecipeRead(APIModel):
     cook_minutes: int
     instructions: list[Any]
     nutrition: dict[str, Any]
+    preference_tags: list[str] = Field(default_factory=list)
+    generation_metadata: dict[str, Any] = Field(default_factory=dict)
     saved_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -408,6 +432,10 @@ class MealSlotRead(APIModel):
     recipe_id: int | None
     servings: Decimal
     status: MealStatus
+    preparation_mode: str = "fresh"
+    source_meal_id: int | None = None
+    prepared_servings: Decimal = Decimal("1")
+    consumed_servings: Decimal = Decimal("1")
     created_at: datetime
     updated_at: datetime
 
@@ -421,6 +449,8 @@ class MealPlanRead(APIModel):
     currency_code: str
     selected_meal_types: list[MealType]
     status: MealPlanStatus
+    planning_request: dict[str, Any] = Field(default_factory=dict)
+    optimizer_summary: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
     meals: list[MealSlotRead]
@@ -442,6 +472,11 @@ class ShoppingListItemRead(APIModel):
     unit: Unit | None
     needed_by_date: date | None
     estimated_price: Decimal | None
+    package_quantity: Decimal | None = None
+    package_count: int | None = None
+    projected_leftover_quantity: Decimal | None = None
+    price_source: str | None = None
+    storage_action: str | None = None
     status: ShoppingItemStatus
     created_at: datetime
     updated_at: datetime
@@ -547,6 +582,135 @@ class WasteEventRead(APIModel):
     estimated_weight_g: Decimal | None
     occurred_at: datetime
     created_at: datetime
+
+
+class GeneratedRecipeIngredient(APIModel):
+    ingredient_id: int
+    quantity: float = Field(gt=0)
+    unit: Unit
+    preparation_note: str | None = Field(default=None, max_length=300)
+    optional: bool = False
+
+
+class GeneratedRecipeCandidate(APIModel):
+    candidate_id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=1, max_length=1000)
+    cuisine: str = Field(min_length=1, max_length=100)
+    category: str = Field(min_length=1, max_length=100)
+    eligible_meal_types: list[MealType] = Field(min_length=1)
+    style_tags: list[str] = Field(default_factory=list, max_length=12)
+    taste_tags: list[str] = Field(default_factory=list, max_length=12)
+    servings: int = Field(default=1, ge=1, le=12)
+    prep_minutes: int = Field(ge=0, le=360)
+    cook_minutes: int = Field(ge=0, le=720)
+    instructions: list[str] = Field(min_length=1, max_length=20)
+    calories_per_serving: int | None = Field(default=None, ge=0, le=5000)
+    protein_g_per_serving: float | None = Field(default=None, ge=0, le=500)
+    ingredients: list[GeneratedRecipeIngredient] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_unique_recipe_fields(self) -> GeneratedRecipeCandidate:
+        if len(set(self.eligible_meal_types)) != len(self.eligible_meal_types):
+            raise ValueError("eligible_meal_types cannot contain duplicates")
+        ingredient_ids = [item.ingredient_id for item in self.ingredients]
+        if len(set(ingredient_ids)) != len(ingredient_ids):
+            raise ValueError("candidate ingredients cannot contain duplicates")
+        return self
+
+
+class GeneratedRecipeBatch(APIModel):
+    recipes: list[GeneratedRecipeCandidate] = Field(min_length=1, max_length=60)
+
+
+class PackageOverride(APIModel):
+    ingredient_id: int
+    quantity: Decimal = Field(gt=0)
+    unit: Unit
+    estimated_price: Decimal | None = Field(default=None, ge=0)
+    currency_code: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    can_freeze: bool = False
+
+    @model_validator(mode="after")
+    def validate_price_currency(self) -> PackageOverride:
+        if (self.estimated_price is None) != (self.currency_code is None):
+            raise ValueError("estimated_price and currency_code must be supplied together")
+        return self
+
+
+class PlanGenerationRequest(APIModel):
+    horizon: PlanningHorizon
+    start_date: date
+    meal_types: list[MealType] = Field(default_factory=lambda: [MealType.DINNER], min_length=1)
+    household_servings: int = Field(default=1, ge=1, le=12)
+    preferred_styles: list[str] = Field(default_factory=list)
+    extra_cuisines: list[str] = Field(default_factory=list)
+    extra_tastes: list[str] = Field(default_factory=list)
+    excluded_ingredient_ids: list[int] = Field(default_factory=list)
+    max_total_minutes: int | None = Field(default=None, ge=10, le=720)
+    checkout_budget: Decimal | None = Field(default=None, ge=0)
+    currency_code: str = Field(default="EUR", pattern=r"^[A-Z]{3}$")
+    allow_package_splitting: bool = True
+    allow_leftovers: bool = True
+    max_batch_portions: int = Field(default=3, ge=1, le=3)
+    package_overrides: list[PackageOverride] = Field(default_factory=list)
+
+    @field_validator("preferred_styles", "extra_cuisines", "extra_tastes", mode="before")
+    @classmethod
+    def normalize_generation_preferences(cls, value: object):
+        return _normalize_preferences(value)
+
+    @model_validator(mode="after")
+    def validate_unique_inputs(self) -> PlanGenerationRequest:
+        if len(set(self.meal_types)) != len(self.meal_types):
+            raise ValueError("meal_types cannot contain duplicates")
+        if len(set(self.excluded_ingredient_ids)) != len(self.excluded_ingredient_ids):
+            raise ValueError("excluded_ingredient_ids cannot contain duplicates")
+        override_ids = [item.ingredient_id for item in self.package_overrides]
+        if len(set(override_ids)) != len(override_ids):
+            raise ValueError("package_overrides may contain one entry per ingredient")
+        return self
+
+
+class PinnedMealChoice(APIModel):
+    slot_key: str = Field(min_length=1, max_length=100)
+    candidate_id: str = Field(min_length=1, max_length=100)
+
+
+class PlanReoptimizeRequest(APIModel):
+    pinned_choices: list[PinnedMealChoice] = Field(default_factory=list)
+    package_overrides: list[PackageOverride] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_overrides(self) -> PlanReoptimizeRequest:
+        slot_keys = [item.slot_key for item in self.pinned_choices]
+        if len(set(slot_keys)) != len(slot_keys):
+            raise ValueError("pinned_choices may contain one choice per slot")
+        ingredient_ids = [item.ingredient_id for item in self.package_overrides]
+        if len(set(ingredient_ids)) != len(ingredient_ids):
+            raise ValueError("package_overrides may contain one entry per ingredient")
+        return self
+
+
+class PlanPreviewRead(APIModel):
+    id: UUID
+    status: str
+    request: dict[str, Any]
+    candidates: list[GeneratedRecipeCandidate]
+    solution: dict[str, Any]
+    prompt_version: str
+    model: str
+    failure_reason: str | None
+    expires_at: datetime
+    confirmed_plan_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConfirmedPlanRead(APIModel):
+    meal_plan: MealPlanRead
+    shopping_list: ShoppingListRead
+    recipes: list[RecipeRead]
 
 
 class HealthResponse(APIModel):
