@@ -1,6 +1,7 @@
 -- Waste-first recipe generation and weekly meal planning.
--- Compatible with storage guidance already on main: this does not recreate
--- ingredient_storage_rules or pantry storage_state columns.
+-- Storage-rule table, pantry storage_state, and storage RLS already exist from
+-- 20260921141459_add_ingredient_storage_rules.sql. This migration adds planner
+-- tables and seeds package options onto that shared catalog.
 
 create table public.ingredient_package_options (
   id bigint generated always as identity primary key,
@@ -91,6 +92,7 @@ alter table public.shopping_list_items
   ),
   add column storage_action text;
 
+-- Expand the compact MVP catalog with ingredients needed by contemporary meals.
 insert into public.ingredients (
   slug, name, base_unit, dietary_tags, allergens,
   recommended_storage_location, typical_shelf_life_days,
@@ -207,6 +209,8 @@ from package p join public.ingredients i on i.slug = p.slug
 on conflict (ingredient_id, quantity, unit) do update
 set label = excluded.label, is_default = excluded.is_default, can_freeze = excluded.can_freeze;
 
+-- Curated EUR estimates make the default catalog budget-capable; receipt history and user
+-- overrides replace these estimates in the backend when available.
 update public.ingredient_package_options option
 set estimated_price = case ingredient.slug
       when 'ground-beef' then 5.49 when 'chicken-breast' then 5.99
