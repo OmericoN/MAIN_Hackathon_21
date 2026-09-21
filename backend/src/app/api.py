@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,9 +11,15 @@ from .database import get_user_session
 from .schemas import (
     HealthResponse,
     IngredientRead,
+    IngredientPackageOptionRead,
+    IngredientStorageRuleRead,
     MealPlanCreate,
     MealPlanPatch,
     MealPlanRead,
+    PlanGenerationRequest,
+    PlanPreviewRead,
+    PlanReoptimizeRequest,
+    ConfirmedPlanRead,
     MealSlotPatch,
     MealSlotRead,
     OnboardingPut,
@@ -38,6 +45,7 @@ from .schemas import (
 )
 from .services import (
     IngredientService,
+    MealPlanPreviewService,
     MealPlanService,
     PantryService,
     ProfileService,
@@ -90,6 +98,51 @@ async def list_ingredients(
         query=q, dietary_tag=dietary_tag, allergen=allergen, limit=limit, offset=offset
     )
     return page(items, total, limit, offset)
+
+
+@router.get("/ingredient-package-options", response_model=list[IngredientPackageOptionRead])
+async def list_ingredient_package_options(session: SessionDep, principal: PrincipalDep):
+    return await IngredientService(session, principal.user_id).package_options()
+
+
+@router.get("/ingredient-storage-rules", response_model=list[IngredientStorageRuleRead])
+async def list_ingredient_storage_rules(session: SessionDep, principal: PrincipalDep):
+    return await IngredientService(session, principal.user_id).storage_rules()
+
+
+@router.post(
+    "/meal-plan-previews",
+    response_model=PlanPreviewRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_meal_plan_preview(
+    payload: PlanGenerationRequest, session: SessionDep, principal: PrincipalDep
+):
+    return await MealPlanPreviewService(session, principal.user_id).create(payload)
+
+
+@router.get("/meal-plan-previews/{preview_id}", response_model=PlanPreviewRead)
+async def get_meal_plan_preview(
+    preview_id: UUID, session: SessionDep, principal: PrincipalDep
+):
+    return await MealPlanPreviewService(session, principal.user_id).get(preview_id)
+
+
+@router.post("/meal-plan-previews/{preview_id}/reoptimize", response_model=PlanPreviewRead)
+async def reoptimize_meal_plan_preview(
+    preview_id: UUID,
+    payload: PlanReoptimizeRequest,
+    session: SessionDep,
+    principal: PrincipalDep,
+):
+    return await MealPlanPreviewService(session, principal.user_id).reoptimize(preview_id, payload)
+
+
+@router.post("/meal-plan-previews/{preview_id}/confirm", response_model=ConfirmedPlanRead)
+async def confirm_meal_plan_preview(
+    preview_id: UUID, session: SessionDep, principal: PrincipalDep
+):
+    return await MealPlanPreviewService(session, principal.user_id).confirm(preview_id)
 
 
 @router.get("/pantry-items/expiring", response_model=Page[PantryItemRead])

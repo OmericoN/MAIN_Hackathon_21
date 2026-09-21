@@ -11,7 +11,10 @@ from sqlalchemy.orm import selectinload
 from .errors import NotFoundError
 from .models import (
     Ingredient,
+    IngredientPackageOption,
+    IngredientStorageRule,
     MealPlan,
+    MealPlanGenerationPreview,
     MealPlanMeal,
     PantryItem,
     Profile,
@@ -89,6 +92,53 @@ class IngredientRepository(Repository[Ingredient]):
         if ingredient is None:
             raise NotFoundError("Ingredient not found")
         return ingredient
+
+    async def all(self) -> list[Ingredient]:
+        rows = await self.session.scalars(select(Ingredient).order_by(Ingredient.name))
+        return list(rows)
+
+    async def package_options(self) -> list[IngredientPackageOption]:
+        rows = await self.session.scalars(
+            select(IngredientPackageOption).order_by(
+                IngredientPackageOption.ingredient_id,
+                IngredientPackageOption.is_default.desc(),
+                IngredientPackageOption.quantity,
+            )
+        )
+        return list(rows)
+
+    async def storage_rules(self) -> list[IngredientStorageRule]:
+        rows = await self.session.scalars(
+            select(IngredientStorageRule).order_by(
+                IngredientStorageRule.ingredient_id,
+                IngredientStorageRule.storage_state,
+            )
+        )
+        return list(rows)
+
+    async def receipt_unit_prices(self) -> dict[int, tuple[float, str]]:
+        rows = await self.session.execute(
+            select(
+                ReceiptItem.ingredient_id,
+                (ReceiptItem.line_total / ReceiptItem.quantity).label("unit_price"),
+                Receipt.currency_code,
+                Receipt.purchased_at,
+            )
+            .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+            .where(
+                Receipt.user_id == self.user_id,
+                Receipt.status == "confirmed",
+                ReceiptItem.ingredient_id.is_not(None),
+                ReceiptItem.line_total.is_not(None),
+                ReceiptItem.quantity.is_not(None),
+                ReceiptItem.quantity > 0,
+            )
+            .order_by(ReceiptItem.ingredient_id, Receipt.purchased_at.desc().nulls_last())
+        )
+        prices: dict[int, tuple[float, str]] = {}
+        for ingredient_id, unit_price, currency_code, _ in rows:
+            prices.setdefault(int(ingredient_id), (float(unit_price), currency_code))
+        return prices
 
 
 class PantryRepository(Repository[PantryItem]):
@@ -169,6 +219,17 @@ class RecipeRepository(Repository[Recipe]):
         if recipe is None:
             raise NotFoundError("Recipe not found")
         return recipe
+
+    async def get_many(self, recipe_ids: list[int]) -> list[Recipe]:
+        if not recipe_ids:
+            return []
+        rows = await self.session.scalars(
+            select(Recipe)
+            .where(Recipe.id.in_(recipe_ids), Recipe.user_id == self.user_id)
+            .options(*self._options)
+            .order_by(Recipe.id)
+        )
+        return list(rows)
 
     async def create(self, values: dict[str, Any], ingredients: list[dict[str, Any]]) -> Recipe:
         recipe = Recipe(user_id=self.user_id, **values)
@@ -300,6 +361,16 @@ class ShoppingListRepository(Repository[ShoppingList]):
             raise NotFoundError("Shopping list not found")
         return shopping_list
 
+    async def get_for_plan(self, plan_id: int) -> ShoppingList:
+        shopping_list = await self.session.scalar(
+            select(ShoppingList)
+            .where(ShoppingList.meal_plan_id == plan_id, ShoppingList.user_id == self.user_id)
+            .options(*self._options)
+        )
+        if shopping_list is None:
+            raise NotFoundError("Shopping list not found")
+        return shopping_list
+
     async def update_item(self, list_id: int, item_id: int, values: dict[str, Any]) -> ShoppingListItem:
         item = await self.session.scalar(
             select(ShoppingListItem).where(
@@ -315,6 +386,87 @@ class ShoppingListRepository(Repository[ShoppingList]):
         await self.session.flush()
         await self.session.refresh(item)
         return item
+
+    async def create_for_plan(
+        self,
+        *,
+        plan_id: int,
+        currency_code: str,
+        estimated_total,
+        items: list[dict[str, Any]],
+    ) -> ShoppingList:
+        shopping_list = ShoppingList(
+            user_id=self.user_id,
+            meal_plan_id=plan_id,
+            currency_code=currency_code,
+            estimated_total=estimated_total,
+            status="active",
+            calculated_at=datetime.now(UTC),
+        )
+        self.session.add(shopping_list)
+        await self.session.flush()
+        self.session.add_all(
+            ShoppingListItem(
+                user_id=self.user_id,
+                shopping_list_id=shopping_list.id,
+                source="generated",
+                status="pending",
+                **item,
+            )
+            for item in items
+        )
+        await self.session.flush()
+        return await self.get(shopping_list.id)
+
+
+class MealPlanPreviewRepository(Repository[MealPlanGenerationPreview]):
+    async def delete_expired(self) -> None:
+        await self.session.execute(
+            delete(MealPlanGenerationPreview).where(
+                MealPlanGenerationPreview.user_id == self.user_id,
+                MealPlanGenerationPreview.expires_at <= datetime.now(UTC),
+                MealPlanGenerationPreview.confirmed_plan_id.is_(None),
+            )
+        )
+
+    async def create(self, values: dict[str, Any]) -> MealPlanGenerationPreview:
+        preview = MealPlanGenerationPreview(user_id=self.user_id, **values)
+        self.session.add(preview)
+        await self.session.flush()
+        await self.session.refresh(preview)
+        return preview
+
+    async def get(self, preview_id: UUID) -> MealPlanGenerationPreview:
+        preview = await self.session.scalar(
+            select(MealPlanGenerationPreview).where(
+                MealPlanGenerationPreview.id == preview_id,
+                MealPlanGenerationPreview.user_id == self.user_id,
+            )
+        )
+        if preview is None:
+            raise NotFoundError("Meal-plan preview not found")
+        return preview
+
+    async def get_for_update(self, preview_id: UUID) -> MealPlanGenerationPreview:
+        preview = await self.session.scalar(
+            select(MealPlanGenerationPreview)
+            .where(
+                MealPlanGenerationPreview.id == preview_id,
+                MealPlanGenerationPreview.user_id == self.user_id,
+            )
+            .with_for_update()
+        )
+        if preview is None:
+            raise NotFoundError("Meal-plan preview not found")
+        return preview
+
+    async def update(self, preview_id: UUID, values: dict[str, Any]) -> MealPlanGenerationPreview:
+        preview = await self.get(preview_id)
+        for field, value in values.items():
+            setattr(preview, field, value)
+        await self.session.flush()
+        await self.session.refresh(preview)
+        return preview
 
 
 class ReceiptRepository(Repository[Receipt]):

@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     db_pool_recycle_seconds: int = Field(default=1800, ge=60)
     db_statement_timeout_ms: int = Field(default=30_000, ge=1_000)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-5.6-terra"
+    openai_timeout_seconds: float = Field(default=45, ge=5, le=180)
+    openai_candidate_limit: int = Field(default=24, ge=6, le=60)
+    recipe_prompt_version: str = Field(default="social-waste-v1", min_length=1, max_length=100)
 
     @field_validator("database_url")
     @classmethod

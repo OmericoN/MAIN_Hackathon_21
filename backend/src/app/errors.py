@@ -31,3 +31,13 @@ class UnauthorizedError(DomainError):
 class ValidationError(DomainError):
     status_code = 422
     code = "validation_error"
+
+
+class GenerationUnavailableError(DomainError):
+    status_code = 503
+    code = "generation_unavailable"
+
+
+class GenerationError(DomainError):
+    status_code = 502
+    code = "generation_failed"

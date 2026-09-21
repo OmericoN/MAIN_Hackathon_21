@@ -55,6 +55,42 @@ class Ingredient(TimestampMixin, Base):
     average_unit_weight_g: Mapped[Decimal | None] = mapped_column(Numeric)
 
 
+class IngredientStorageRule(TimestampMixin, Base):
+    __tablename__ = "ingredient_storage_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "ingredient_id", "storage_state", name="ingredient_storage_rules_ingredient_id_storage_state_key"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("ingredients.id", ondelete="CASCADE")
+    )
+    storage_state: Mapped[str] = mapped_column(Text)
+    recommended_storage_location: Mapped[str] = mapped_column(Text)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer)
+    freezer_shelf_life_days: Mapped[int | None] = mapped_column(Integer)
+    storage_instructions: Mapped[str] = mapped_column(Text)
+    avoidance_notes: Mapped[str | None] = mapped_column(Text)
+
+
+class IngredientPackageOption(TimestampMixin, Base):
+    __tablename__ = "ingredient_package_options"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("ingredients.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(Text)
+    quantity: Mapped[Decimal] = mapped_column(Numeric)
+    unit: Mapped[str] = mapped_column(Text)
+    estimated_price: Mapped[Decimal | None] = mapped_column(Numeric)
+    currency_code: Mapped[str | None] = mapped_column(String(3))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_freeze: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Profile(TimestampMixin, Base):
     __tablename__ = "profiles"
     __table_args__ = (
@@ -103,6 +139,8 @@ class Recipe(TimestampMixin, Base):
     cook_minutes: Mapped[int] = mapped_column(Integer, default=0)
     instructions: Mapped[list[Any]] = mapped_column(JSONB, default=list)
     nutrition: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    preference_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    generation_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     ingredients: Mapped[list[RecipeIngredient]] = relationship(
@@ -161,6 +199,8 @@ class MealPlan(TimestampMixin, Base):
     currency_code: Mapped[str] = mapped_column(String(3))
     selected_meal_types: Mapped[list[str]] = mapped_column(ARRAY(Text), default=lambda: ["dinner"])
     status: Mapped[str] = mapped_column(Text, default="draft")
+    planning_request: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    optimizer_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
     meals: Mapped[list[MealPlanMeal]] = relationship(
         back_populates="meal_plan",
@@ -185,6 +225,12 @@ class MealPlanMeal(TimestampMixin, Base):
             ondelete="RESTRICT",
             name="meal_plan_meals_recipe_id_user_id_fkey",
         ),
+        ForeignKeyConstraint(
+            ["source_meal_id", "user_id"],
+            ["meal_plan_meals.id", "meal_plan_meals.user_id"],
+            ondelete="CASCADE",
+            name="meal_plan_meals_source_meal_id_user_id_fkey",
+        ),
         UniqueConstraint("id", "user_id", name="meal_plan_meals_id_user_id_key"),
         UniqueConstraint(
             "meal_plan_id", "meal_date", "meal_type", name="meal_plan_meals_meal_plan_id_meal_date_meal_type_key"
@@ -201,6 +247,10 @@ class MealPlanMeal(TimestampMixin, Base):
     recipe_id: Mapped[int | None] = mapped_column(BigInteger)
     servings: Mapped[Decimal] = mapped_column(Numeric, default=Decimal("1"))
     status: Mapped[str] = mapped_column(Text, default="requested")
+    preparation_mode: Mapped[str] = mapped_column(Text, default="fresh")
+    source_meal_id: Mapped[int | None] = mapped_column(BigInteger)
+    prepared_servings: Mapped[Decimal] = mapped_column(Numeric, default=Decimal("1"))
+    consumed_servings: Mapped[Decimal] = mapped_column(Numeric, default=Decimal("1"))
 
     meal_plan: Mapped[MealPlan] = relationship(back_populates="meals", lazy="raise")
 
@@ -292,6 +342,10 @@ class PantryItem(TimestampMixin, Base):
     remaining_quantity: Mapped[Decimal] = mapped_column(Numeric)
     unit: Mapped[str] = mapped_column(Text)
     storage_location: Mapped[str] = mapped_column(Text, default="pantry")
+    storage_state: Mapped[str] = mapped_column(Text, default="as_purchased")
+    storage_state_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     best_before_on: Mapped[date | None] = mapped_column(Date)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -357,9 +411,43 @@ class ShoppingListItem(TimestampMixin, Base):
     unit: Mapped[str | None] = mapped_column(Text)
     needed_by_date: Mapped[date | None] = mapped_column(Date)
     estimated_price: Mapped[Decimal | None] = mapped_column(Numeric)
+    package_quantity: Mapped[Decimal | None] = mapped_column(Numeric)
+    package_count: Mapped[int | None] = mapped_column(Integer)
+    projected_leftover_quantity: Mapped[Decimal | None] = mapped_column(Numeric)
+    price_source: Mapped[str | None] = mapped_column(Text)
+    storage_action: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, default="pending")
 
     shopping_list: Mapped[ShoppingList] = relationship(back_populates="items", lazy="raise")
+
+
+class MealPlanGenerationPreview(TimestampMixin, Base):
+    __tablename__ = "meal_plan_generation_previews"
+    __table_args__ = (
+        UniqueConstraint("id", "user_id", name="meal_plan_generation_previews_id_user_id_key"),
+        ForeignKeyConstraint(
+            ["confirmed_plan_id", "user_id"],
+            ["meal_plans.id", "meal_plans.user_id"],
+            ondelete="CASCADE",
+            name="meal_plan_generation_previews_confirmed_plan_id_user_id_fkey",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("profiles.user_id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(Text, default="ready")
+    request: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    candidates: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    solution: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    prompt_version: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    failure_reason: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    confirmed_plan_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class WasteEvent(Base):
