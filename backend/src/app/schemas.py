@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class APIModel(BaseModel):
@@ -42,12 +42,52 @@ class StorageLocation(StrEnum):
     OTHER = "other"
 
 
-class ActivityLevel(StrEnum):
-    SEDENTARY = "sedentary"
-    LIGHT = "light"
-    MODERATE = "moderate"
-    VERY_ACTIVE = "very_active"
-    ATHLETE = "athlete"
+class AllergenCode(StrEnum):
+    GLUTEN = "gluten"
+    CRUSTACEANS = "crustaceans"
+    EGGS = "eggs"
+    FISH = "fish"
+    PEANUTS = "peanuts"
+    SOYBEANS = "soybeans"
+    MILK = "milk"
+    NUTS = "nuts"
+    CELERY = "celery"
+    MUSTARD = "mustard"
+    SESAME = "sesame"
+    SULPHITES = "sulphites"
+    LUPIN = "lupin"
+    MOLLUSCS = "molluscs"
+
+
+def _normalize_preferences(value: object) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("Preference values must be a list")
+    values = cast(list[object], value)
+    if len(values) > 50:
+        raise ValueError("Preference lists may contain at most 50 values")
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str):
+            raise ValueError("Preference values must be strings")
+        cleaned = item.strip().casefold()
+        if not cleaned:
+            raise ValueError("Preference values cannot be blank")
+        if len(cleaned) > 100:
+            raise ValueError("Preference values may contain at most 100 characters")
+        if cleaned in seen:
+            raise ValueError("Preference values must be unique")
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return normalized
+
+
+def _normalize_allergies(value: object) -> list[str]:
+    normalized = _normalize_preferences(value)
+    if len(normalized) > len(AllergenCode):
+        raise ValueError("Too many allergy values")
+    return normalized
 
 
 class MealType(StrEnum):
@@ -117,10 +157,11 @@ class WasteReason(StrEnum):
 class ProfileRead(APIModel):
     display_name: str | None
     dietary_preferences: list[str]
-    allergies: list[Any]
+    allergies: list[AllergenCode]
     preferred_cuisines: list[str]
-    activity_level: ActivityLevel | None
+    preferred_tastes: list[str]
     daily_calorie_target: int | None
+    onboarding_completed_at: datetime | None
     locale: str
     timezone: str
     currency_code: str
@@ -131,13 +172,54 @@ class ProfileRead(APIModel):
 class ProfilePatch(APIModel):
     display_name: str | None = Field(default=None, max_length=200)
     dietary_preferences: list[str] | None = None
-    allergies: list[Any] | None = None
+    allergies: list[AllergenCode] | None = None
     preferred_cuisines: list[str] | None = None
-    activity_level: ActivityLevel | None = None
+    preferred_tastes: list[str] | None = None
     daily_calorie_target: int | None = Field(default=None, ge=500, le=10_000)
     locale: str | None = Field(default=None, min_length=2, max_length=35)
     timezone: str | None = Field(default=None, min_length=1, max_length=100)
     currency_code: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+
+    @field_validator(
+        "dietary_preferences", "preferred_cuisines", "preferred_tastes", mode="before"
+    )
+    @classmethod
+    def normalize_optional_preferences(cls, value: object):
+        if value is None:
+            raise ValueError("Preference lists cannot be null")
+        return _normalize_preferences(value)
+
+    @field_validator("allergies", mode="before")
+    @classmethod
+    def normalize_optional_allergies(cls, value: object):
+        if value is None:
+            raise ValueError("Allergies cannot be null")
+        return _normalize_allergies(value)
+
+
+class OnboardingPut(APIModel):
+    display_name: str | None = Field(default=None, max_length=200)
+    dietary_preferences: list[str] = Field(default_factory=list)
+    allergies: list[AllergenCode] = Field(default_factory=list)
+    preferred_cuisines: list[str] = Field(default_factory=list)
+    preferred_tastes: list[str] = Field(default_factory=list)
+    daily_calorie_target: int | None = Field(default=None, ge=500, le=10_000)
+
+    @field_validator(
+        "dietary_preferences", "preferred_cuisines", "preferred_tastes", mode="before"
+    )
+    @classmethod
+    def normalize_preferences(cls, value: object):
+        if value is None:
+            raise ValueError("Preference lists cannot be null")
+        return _normalize_preferences(value)
+
+    @field_validator("allergies", mode="before")
+    @classmethod
+    def normalize_allergies(cls, value: object):
+        if value is None:
+            raise ValueError("Allergies cannot be null")
+        return _normalize_allergies(value)
 
 
 class IngredientRead(APIModel):

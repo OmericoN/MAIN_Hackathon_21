@@ -24,6 +24,21 @@ EXPECTED_TABLES = {
     "waste_events",
 }
 EXPECTED_FUNCTIONS = {"confirm_receipt", "rebuild_shopping_list", "record_waste"}
+EXPECTED_PROFILE_COLUMNS = {
+    "user_id",
+    "display_name",
+    "dietary_preferences",
+    "allergies",
+    "preferred_cuisines",
+    "preferred_tastes",
+    "daily_calorie_target",
+    "onboarding_completed_at",
+    "locale",
+    "timezone",
+    "currency_code",
+    "created_at",
+    "updated_at",
+}
 
 
 @pytest.mark.asyncio
@@ -59,8 +74,36 @@ async def test_live_schema_contract_is_present() -> None:
                     )
                 ).scalars()
             )
+            profile_columns = set(
+                (
+                    await connection.execute(
+                        text(
+                            "select column_name from information_schema.columns "
+                            "where table_schema = 'public' and table_name = 'profiles'"
+                        )
+                    )
+                ).scalars()
+            )
+            profile_policies = (
+                await connection.execute(
+                    text(
+                        "select roles, qual, with_check from pg_policies "
+                        "where schemaname = 'public' and tablename = 'profiles'"
+                    )
+                )
+            ).all()
         assert EXPECTED_TABLES <= tables
         assert EXPECTED_FUNCTIONS <= functions
         assert EXPECTED_TABLES <= rls_tables
+        assert EXPECTED_PROFILE_COLUMNS <= profile_columns
+        assert "activity_level" not in profile_columns
+        assert any(
+            "authenticated" in roles
+            and "auth.uid" in (qual or "")
+            and "user_id" in (qual or "")
+            and "auth.uid" in (with_check or "")
+            and "user_id" in (with_check or "")
+            for roles, qual, with_check in profile_policies
+        )
     finally:
         await engine.dispose()

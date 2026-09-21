@@ -25,6 +25,7 @@ from .schemas import (
     MealSlotPatch,
     PantryItemCreate,
     PantryItemPatch,
+    OnboardingPut,
     ProfilePatch,
     ReceiptCreate,
     ReceiptExtraction,
@@ -57,7 +58,10 @@ class ProfileService:
         return await self.repo.get()
 
     async def update(self, payload: ProfilePatch):
-        return await self.repo.update(payload.model_dump(exclude_unset=True))
+        return await self.repo.update(payload.model_dump(exclude_unset=True, mode="json"))
+
+    async def complete_onboarding(self, payload: OnboardingPut):
+        return await self.repo.complete_onboarding(payload.model_dump(mode="json"))
 
 
 class IngredientService:

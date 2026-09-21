@@ -13,6 +13,12 @@ The API verifies Supabase access tokens locally against the project's JWKS endpo
 
 The backend does not create or migrate tables. The existing Supabase schema, triggers, grants, and the `confirm_receipt`, `rebuild_shopping_list`, and `record_waste` functions remain authoritative.
 
+Supabase Auth owns account signup. After obtaining an access token, a client can
+complete the minimal personalization flow with `PUT /v1/me/onboarding`. The
+endpoint stores dietary restrictions, standard allergen codes, preferred
+cuisines and tastes, and an optional daily calorie target. `GET` and `PATCH`
+`/v1/me/profile` expose the saved profile for later edits.
+
 ## Tests
 
 Run `uv run pytest` from `backend`. Unit and API contract tests do not alter the database. Set `TEST_DATABASE_URL` only to a dedicated test database to enable the opt-in read-only schema contract test.

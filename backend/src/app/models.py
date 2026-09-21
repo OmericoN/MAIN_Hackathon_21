@@ -59,10 +59,6 @@ class Profile(TimestampMixin, Base):
     __tablename__ = "profiles"
     __table_args__ = (
         CheckConstraint(
-            "activity_level in ('sedentary', 'light', 'moderate', 'very_active', 'athlete')",
-            name="profiles_activity_level_check",
-        ),
-        CheckConstraint(
             "daily_calorie_target between 500 and 10000",
             name="profiles_daily_calorie_target_check",
         ),
@@ -73,10 +69,11 @@ class Profile(TimestampMixin, Base):
     )
     display_name: Mapped[str | None] = mapped_column(Text)
     dietary_preferences: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    allergies: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    allergies: Mapped[list[str]] = mapped_column(JSONB, default=list)
     preferred_cuisines: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    activity_level: Mapped[str | None] = mapped_column(Text)
+    preferred_tastes: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     daily_calorie_target: Mapped[int | None] = mapped_column(Integer)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locale: Mapped[str] = mapped_column(Text, default="en-NL")
     timezone: Mapped[str] = mapped_column(Text, default="Europe/Amsterdam")
     currency_code: Mapped[str] = mapped_column(String(3), default="EUR")
