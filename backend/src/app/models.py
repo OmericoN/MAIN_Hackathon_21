@@ -55,6 +55,34 @@ class Ingredient(TimestampMixin, Base):
     average_unit_weight_g: Mapped[Decimal | None] = mapped_column(Numeric)
 
 
+class IngredientStorageRule(TimestampMixin, Base):
+    __tablename__ = "ingredient_storage_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "storage_state in ('as_purchased', 'opened', 'ripe', 'cut')",
+            name="ingredient_storage_rules_storage_state_check",
+        ),
+        CheckConstraint(
+            "recommended_storage_location in ('pantry', 'refrigerator', 'freezer', 'counter', 'other')",
+            name="ingredient_storage_rules_location_check",
+        ),
+        CheckConstraint("shelf_life_days >= 0", name="ingredient_storage_rules_shelf_life_check"),
+        CheckConstraint(
+            "freezer_shelf_life_days >= 0", name="ingredient_storage_rules_freezer_shelf_life_check"
+        ),
+    )
+
+    ingredient_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True
+    )
+    storage_state: Mapped[str] = mapped_column(Text, primary_key=True)
+    recommended_storage_location: Mapped[str] = mapped_column(Text)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer)
+    freezer_shelf_life_days: Mapped[int | None] = mapped_column(Integer)
+    storage_instructions: Mapped[str] = mapped_column(Text)
+    avoidance_notes: Mapped[str | None] = mapped_column(Text)
+
+
 class Profile(TimestampMixin, Base):
     __tablename__ = "profiles"
     __table_args__ = (
@@ -292,6 +320,10 @@ class PantryItem(TimestampMixin, Base):
     remaining_quantity: Mapped[Decimal] = mapped_column(Numeric)
     unit: Mapped[str] = mapped_column(Text)
     storage_location: Mapped[str] = mapped_column(Text, default="pantry")
+    storage_state: Mapped[str] = mapped_column(Text, default="as_purchased")
+    storage_state_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     best_before_on: Mapped[date | None] = mapped_column(Date)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

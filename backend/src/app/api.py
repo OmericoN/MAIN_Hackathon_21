@@ -9,6 +9,7 @@ from .auth import Principal, get_principal
 from .database import get_user_session
 from .schemas import (
     HealthResponse,
+    IngredientStorageRuleRead,
     IngredientRead,
     MealPlanCreate,
     MealPlanPatch,
@@ -90,6 +91,13 @@ async def list_ingredients(
         query=q, dietary_tag=dietary_tag, allergen=allergen, limit=limit, offset=offset
     )
     return page(items, total, limit, offset)
+
+
+@router.get("/ingredients/{ingredient_id}/storage-rules", response_model=list[IngredientStorageRuleRead])
+async def list_ingredient_storage_rules(
+    ingredient_id: int, session: SessionDep, principal: PrincipalDep
+):
+    return await IngredientService(session, principal.user_id).storage_rules(ingredient_id)
 
 
 @router.get("/pantry-items/expiring", response_model=Page[PantryItemRead])

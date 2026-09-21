@@ -11,6 +11,7 @@ from src.app.database import normalize_database_url
 
 EXPECTED_TABLES = {
     "ingredients",
+    "ingredient_storage_rules",
     "meal_plan_meals",
     "meal_plans",
     "pantry_items",

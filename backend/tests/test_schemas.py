@@ -5,12 +5,14 @@ import pytest
 from pydantic import ValidationError
 
 from src.app.schemas import (
+    IngredientStorageRuleRead,
     MealPlanCreate,
     OnboardingPut,
     PantryItemCreate,
     ProfilePatch,
     ReceiptExtraction,
     ReceiptItemInput,
+    StorageState,
 )
 
 
@@ -81,6 +83,22 @@ def test_pantry_item_defaults_remaining_quantity_in_service_but_validates_upper_
             remaining_quantity=Decimal("3"),
             unit="each",
         )
+
+
+def test_storage_guidance_uses_only_supported_states() -> None:
+    rule = IngredientStorageRuleRead.model_validate(
+        {
+            "ingredient_id": 1,
+            "storage_state": "ripe",
+            "recommended_storage_location": "refrigerator",
+            "shelf_life_days": 3,
+            "freezer_shelf_life_days": 90,
+            "storage_instructions": "Refrigerate once ripe.",
+            "avoidance_notes": None,
+        }
+    )
+
+    assert rule.storage_state is StorageState.RIPE
 
 
 def test_receipt_extraction_requires_unique_line_numbers() -> None:

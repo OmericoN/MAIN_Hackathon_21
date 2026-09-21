@@ -27,6 +27,7 @@ def test_openapi_exposes_expected_workflow_routes() -> None:
 
     assert "/v1/me/onboarding" in schema["paths"]
     assert "/v1/receipts/{receipt_id}/confirm" in schema["paths"]
+    assert "/v1/ingredients/{ingredient_id}/storage-rules" in schema["paths"]
     assert "/v1/meal-plans/{plan_id}/shopping-list/rebuild" in schema["paths"]
     assert "/v1/waste-events" in schema["paths"]
     onboarding_fields = schema["components"]["schemas"]["OnboardingPut"]["properties"]
@@ -41,6 +42,8 @@ def test_openapi_exposes_expected_workflow_routes() -> None:
     }
     assert "onboarding_completed_at" in profile_fields
     assert "activity_level" not in profile_fields
+    pantry_fields = schema["components"]["schemas"]["PantryItemRead"]["properties"]
+    assert {"storage_state", "storage_state_changed_at", "storage_guidance"} <= set(pantry_fields)
 
 
 def test_validation_errors_use_the_shared_error_shape() -> None:

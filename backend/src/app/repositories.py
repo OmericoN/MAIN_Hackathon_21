@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from .errors import NotFoundError
 from .models import (
     Ingredient,
+    IngredientStorageRule,
     MealPlan,
     MealPlanMeal,
     PantryItem,
@@ -89,6 +90,26 @@ class IngredientRepository(Repository[Ingredient]):
         if ingredient is None:
             raise NotFoundError("Ingredient not found")
         return ingredient
+
+
+class IngredientStorageRuleRepository(Repository[IngredientStorageRule]):
+    async def list_for_ingredient(self, ingredient_id: int) -> list[IngredientStorageRule]:
+        rows = await self.session.scalars(
+            select(IngredientStorageRule)
+            .where(IngredientStorageRule.ingredient_id == ingredient_id)
+            .order_by(IngredientStorageRule.ingredient_id, IngredientStorageRule.storage_state)
+        )
+        return list(rows)
+
+    async def list_for_ingredients(self, ingredient_ids: set[int]) -> list[IngredientStorageRule]:
+        if not ingredient_ids:
+            return []
+        rows = await self.session.scalars(
+            select(IngredientStorageRule).where(
+                IngredientStorageRule.ingredient_id.in_(ingredient_ids)
+            )
+        )
+        return list(rows)
 
 
 class PantryRepository(Repository[PantryItem]):
