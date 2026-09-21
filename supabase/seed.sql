@@ -1,0 +1,5 @@
+-- Local-only development data belongs here.
+--
+-- Required catalog rows are deliberately part of the baseline migration so that
+-- every linked environment receives them through `supabase db push`.
+-- Keep this file free of production data, credentials, and personal information.
