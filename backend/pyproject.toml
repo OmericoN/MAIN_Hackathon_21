@@ -8,5 +8,10 @@ dependencies = [
     "alembic>=1.20.0",
     "asyncpg>=0.31.0",
     "python-dotenv>=1.2.3",
+    "sacremoses>=0.2.0",
+    "sentencepiece>=0.2.2",
     "sqlalchemy>=2.0.54",
+    "torch>=2.14.0",
+    "transformers>=5.17.0",
+    "veryfi>=3.0.0",
 ]
