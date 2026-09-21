@@ -11,8 +11,13 @@ dependencies = [
     "pydantic-settings>=2.10.0",
     "pyjwt[crypto]>=2.10.0",
     "python-dotenv>=1.2.3",
+    "sacremoses>=0.2.0",
+    "sentencepiece>=0.2.2",
     "sqlalchemy>=2.0.54",
     "uvicorn[standard]>=0.35.0",
+    "torch>=2.14.0",
+    "transformers>=5.17.0",
+    "veryfi>=3.0.0",
 ]
 
 [dependency-groups]
